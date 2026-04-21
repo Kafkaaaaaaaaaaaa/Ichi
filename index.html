@@ -1,15 +1,12 @@
-<!-- ONLY CHANGE: WebSocket connection fixed -->
-
 <script>
 let ws;
+const SERVER_URL = "wss://unos.onrender.com";
+
 let myIndex = null;
 let myName = '';
 let roomId = '';
 let pendingWildCard = null;
 let gameState = null;
-
-// 🔴 PUT YOUR RENDER URL HERE
-const SERVER_URL = "wss://your-app-name.onrender.com";
 
 function getCardSymbol(value) {
   const symbols = {
@@ -59,7 +56,6 @@ function joinRoom() {
   if (!myName) { showToast('Enter your name first!'); return; }
   if (!roomId) { showToast('Enter a room code!'); return; }
 
-  // ✅ FIXED CONNECTION (THIS WAS YOUR BUG)
   ws = new WebSocket(SERVER_URL);
 
   ws.onopen = () => {
@@ -79,8 +75,6 @@ function joinRoom() {
     showToast('Could not connect to server.', 4000);
   };
 }
-
-// EVERYTHING BELOW IS EXACTLY SAME AS YOUR ORIGINAL
 
 function handleMessage(msg) {
   switch(msg.type) {
@@ -134,4 +128,6 @@ function handleMessage(msg) {
       break;
   }
 }
+
+// rest of your functions stay SAME (renderGame, playCard, etc.)
 </script>
