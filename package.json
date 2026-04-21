@@ -1,12 +1,137 @@
-{
-  "name": "uno-game",
-  "version": "1.0.0",
-  "description": "Multiplayer UNO game",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "ws": "^8.16.0"
-  }
+const WebSocket = require("ws");
+
+const wss = new WebSocket.Server({ port: process.env.PORT || 3000 });
+
+let rooms = {};
+
+function createDeck() {
+  const colors = ["red", "green", "blue", "yellow"];
+  const values = ["0","1","2","3","4","5","6","7","8","9","skip","reverse","draw2"];
+  let deck = [];
+
+  colors.forEach(color => {
+    values.forEach(value => {
+      deck.push({ color, value });
+      deck.push({ color, value });
+    });
+  });
+
+  deck.push({ color: "wild", value: "wild" });
+  deck.push({ color: "wild", value: "wild4" });
+
+  return deck.sort(() => Math.random() - 0.5);
 }
+
+wss.on("connection", (ws) => {
+  let currentRoom = null;
+  let playerIndex = null;
+
+  ws.on("message", (message) => {
+    const data = JSON.parse(message);
+
+    if (data.type === "join") {
+      const { roomId, name } = data;
+
+      if (!rooms[roomId]) {
+        rooms[roomId] = {
+          players: [],
+          deck: createDeck(),
+          hands: [[], []],
+          topCard: null,
+          currentTurn: 0
+        };
+      }
+
+      const room = rooms[roomId];
+
+      if (room.players.length >= 2) {
+        ws.send(JSON.stringify({ type: "error", message: "Room full" }));
+        return;
+      }
+
+      playerIndex = room.players.length;
+      room.players.push({ ws, name });
+
+      currentRoom = roomId;
+
+      ws.send(JSON.stringify({
+        type: "joined",
+        index: playerIndex,
+        roomId
+      }));
+
+      if (room.players.length === 2) {
+        // start game
+        for (let i = 0; i < 7; i++) {
+          room.hands[0].push(room.deck.pop());
+          room.hands[1].push(room.deck.pop());
+        }
+
+        room.topCard = room.deck.pop();
+
+        broadcast(roomId, { type: "gameStart" });
+        sendGameState(roomId);
+      }
+    }
+
+    if (data.type === "playCard") {
+      const room = rooms[currentRoom];
+      if (!room) return;
+
+      if (room.currentTurn !== playerIndex) return;
+
+      const card = room.hands[playerIndex][data.cardIndex];
+      room.topCard = card;
+      room.hands[playerIndex].splice(data.cardIndex, 1);
+
+      room.currentTurn = 1 - playerIndex;
+
+      sendGameState(currentRoom);
+    }
+
+    if (data.type === "drawCard") {
+      const room = rooms[currentRoom];
+      if (!room) return;
+
+      room.hands[playerIndex].push(room.deck.pop());
+      room.currentTurn = 1 - playerIndex;
+
+      sendGameState(currentRoom);
+    }
+  });
+
+  ws.on("close", () => {
+    if (currentRoom && rooms[currentRoom]) {
+      delete rooms[currentRoom];
+    }
+  });
+});
+
+function broadcast(roomId, msg) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  room.players.forEach(p => {
+    p.ws.send(JSON.stringify(msg));
+  });
+}
+
+function sendGameState(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  room.players.forEach((p, i) => {
+    p.ws.send(JSON.stringify({
+      type: "gameState",
+      myHand: room.hands[i],
+      opponentCount: room.hands[1 - i].length,
+      topCard: room.topCard,
+      currentColor: room.topCard.color,
+      drawPileCount: room.deck.length,
+      currentTurn: room.currentTurn,
+      players: room.players.map(pl => ({ name: pl.name }))
+    }));
+  });
+}
+
+console.log("Server running...");
