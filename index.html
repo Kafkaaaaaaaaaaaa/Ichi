@@ -1,0 +1,137 @@
+<!-- ONLY CHANGE: WebSocket connection fixed -->
+
+<script>
+let ws;
+let myIndex = null;
+let myName = '';
+let roomId = '';
+let pendingWildCard = null;
+let gameState = null;
+
+// 🔴 PUT YOUR RENDER URL HERE
+const SERVER_URL = "wss://your-app-name.onrender.com";
+
+function getCardSymbol(value) {
+  const symbols = {
+    'skip': '⊘',
+    'reverse': '↺',
+    'draw2': '+2',
+    'wild': '🌈',
+    'wild4': '+4',
+  };
+  return symbols[value] || value.toUpperCase();
+}
+
+function getColorStyle(color) {
+  const map = { red: '#e63946', green: '#2dc653', blue: '#4895ef', yellow: '#f4c430', wild: '#9b5de5' };
+  return map[color] || '#666';
+}
+
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function showScreen(id) {
+  ['lobby', 'waiting', 'game', 'gameover'].forEach(s => {
+    const el = document.getElementById(s);
+    el.style.display = 'none';
+  });
+  const target = document.getElementById(id);
+  target.style.display = 'flex';
+  target.style.flexDirection = 'column';
+  target.style.alignItems = id === 'game' ? 'stretch' : 'center';
+}
+
+function randomRoom() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  document.getElementById('roomInput').value = code;
+}
+
+function joinRoom() {
+  myName = document.getElementById('nameInput').value.trim();
+  roomId = document.getElementById('roomInput').value.trim().toUpperCase();
+
+  if (!myName) { showToast('Enter your name first!'); return; }
+  if (!roomId) { showToast('Enter a room code!'); return; }
+
+  // ✅ FIXED CONNECTION (THIS WAS YOUR BUG)
+  ws = new WebSocket(SERVER_URL);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'join', roomId, name: myName }));
+  };
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    showToast('Connection lost. Refresh to reconnect.', 5000);
+  };
+
+  ws.onerror = () => {
+    showToast('Could not connect to server.', 4000);
+  };
+}
+
+// EVERYTHING BELOW IS EXACTLY SAME AS YOUR ORIGINAL
+
+function handleMessage(msg) {
+  switch(msg.type) {
+    case 'joined':
+      myIndex = msg.index;
+      document.getElementById('displayRoomCode').textContent = msg.roomId;
+      showScreen('waiting');
+      break;
+
+    case 'waiting':
+      showScreen('waiting');
+      break;
+
+    case 'gameStart':
+      showScreen('game');
+      showToast('Game started! 🎴');
+      break;
+
+    case 'gameState':
+      gameState = msg;
+      renderGame(msg);
+      break;
+
+    case 'gameOver':
+      const isWinner = msg.winner === myIndex;
+      document.getElementById('gameoverTitle').textContent = isWinner ? '🎉 You Win!' : '😔 You Lost';
+      document.getElementById('gameoverSub').textContent = isWinner
+        ? `${msg.winnerName} wins this round!`
+        : `${msg.winnerName} beat you this time.`;
+      showScreen('gameover');
+      break;
+
+    case 'unoCalled':
+      showToast(`${msg.playerName} called UNO! 🔴`);
+      break;
+
+    case 'unoCaught':
+      showToast(`${msg.caughtName} got caught! +2 cards 😂`);
+      break;
+
+    case 'rematchWaiting':
+      showToast(`${msg.playerName} wants a rematch...`);
+      break;
+
+    case 'playerLeft':
+      showToast('Opponent disconnected 😢', 5000);
+      break;
+
+    case 'error':
+      showToast(msg.message);
+      break;
+  }
+}
+</script>
