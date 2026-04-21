@@ -1,12 +1,13 @@
 const WebSocket = require("ws");
 
-const wss = new WebSocket.Server({ port: process.env.PORT || 3000 });
+const PORT = process.env.PORT || 3000;
+const wss = new WebSocket.Server({ port: PORT });
 
 let rooms = {};
 
 function createDeck() {
   const colors = ["red", "green", "blue", "yellow"];
-  const values = ["0","1","2","3","4","5","6","7","8","9","skip","reverse","draw2"];
+  const values = ["0","1","2","3","4","5","6","7","8","9"];
   let deck = [];
 
   colors.forEach(color => {
@@ -27,7 +28,7 @@ wss.on("connection", (ws) => {
   let playerIndex = null;
 
   ws.on("message", (message) => {
-    const data = JSON.parse(message);
+    const data = JSON.parse(message.toString());
 
     if (data.type === "join") {
       const { roomId, name } = data;
@@ -51,7 +52,6 @@ wss.on("connection", (ws) => {
 
       playerIndex = room.players.length;
       room.players.push({ ws, name });
-
       currentRoom = roomId;
 
       ws.send(JSON.stringify({
@@ -61,7 +61,6 @@ wss.on("connection", (ws) => {
       }));
 
       if (room.players.length === 2) {
-        // start game
         for (let i = 0; i < 7; i++) {
           room.hands[0].push(room.deck.pop());
           room.hands[1].push(room.deck.pop());
@@ -77,7 +76,6 @@ wss.on("connection", (ws) => {
     if (data.type === "playCard") {
       const room = rooms[currentRoom];
       if (!room) return;
-
       if (room.currentTurn !== playerIndex) return;
 
       const card = room.hands[playerIndex][data.cardIndex];
@@ -85,7 +83,6 @@ wss.on("connection", (ws) => {
       room.hands[playerIndex].splice(data.cardIndex, 1);
 
       room.currentTurn = 1 - playerIndex;
-
       sendGameState(currentRoom);
     }
 
@@ -134,4 +131,4 @@ function sendGameState(roomId) {
   });
 }
 
-console.log("Server running...");
+console.log("Server running on port " + PORT);
